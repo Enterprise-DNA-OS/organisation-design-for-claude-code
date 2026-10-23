@@ -1,0 +1,4 @@
+id,parentId,Title,Department,FTE,AnnualRate,Currency,Occupancy
+R1,,Director,Management,1,150000,NZD,filled
+R2,R1,Analyst,Delivery,0.5,80000,NZD,vacant
+R3,R1,Regional lead,Australia,1,100000,AUD,filled

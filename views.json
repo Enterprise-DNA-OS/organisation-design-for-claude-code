@@ -1,13 +1,30 @@
 [
   {
     "name": "week",
-    "title": "This week",
-    "subtitle": "Organisation Design for Claude Code: what needs attention, rendered by npm run view",
+    "title": "Organisation review",
+    "subtitle": "Position snapshots, costs and review findings. Fictional demo data.",
     "sections": [
       {
-        "title": "Needs attention",
-        "note": "TODO(author): point this at the industry's attention view (overdue, stuck, quiet).",
-        "sql": "select 'replace me' as item, 'TODO(author)' as why"
+        "title": "Scenarios",
+        "sql": "select code,name,status,owner,source_as_of,review_on from scenarios order by code"
+      },
+      {
+        "title": "Review findings",
+        "sql": "select s.code,f.rule,f.finding from review_findings f join scenarios s on s.id=f.scenario_id order by s.code,f.rule"
+      }
+    ]
+  },
+  {
+    "name": "structure",
+    "title": "Capacity and reporting structure",
+    "sections": [
+      {
+        "title": "Department capacity",
+        "sql": "select s.code,d.department,d.currency,d.positions,d.fte,d.vacant_fte,d.annual_cost_amount from department_costs d join scenarios s on s.id=d.scenario_id order by s.code,d.department,d.currency"
+      },
+      {
+        "title": "Reporting layers",
+        "sql": "select s.code as scenario,l.code,l.title,l.layer,l.path from position_layers l join scenarios s on s.id=l.scenario_id order by s.code,l.path"
       }
     ]
   }

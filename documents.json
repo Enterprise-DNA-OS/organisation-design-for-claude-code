@@ -1,11 +1,48 @@
 [
   {
-    "name": "example",
-    "title": "TODO(author): the first document this industry must produce",
-    "for_each": "select gen_random_uuid() as id, 'Example' as name",
-    "file": "name",
+    "name": "scenario-pack",
+    "title": "Scenario review pack",
+    "for_each": "select id,code from scenarios order by code",
+    "file": "code",
     "sections": [
-      { "title": "Details", "sql": "select 'replace me' as item, $1::text as record_id" }
+      {
+        "title": "Scope and review",
+        "sql": "select code,name,status,owner,purpose,source_as_of,review_on,approved_by,approval_evidence from scenarios where id=$1"
+      },
+      {
+        "title": "Department capacity and annual cost",
+        "note": "Full-time annual rate multiplied by position FTE. Currencies are separate. This is a planning estimate, not payroll.",
+        "sql": "select department,currency,positions,fte,vacant_fte,annual_cost_amount from department_costs where scenario_id=$1 order by department,currency"
+      },
+      {
+        "title": "Positions",
+        "sql": "select code,title,department,fte,currency,annual_cost_amount from position_costs where scenario_id=$1 order by code"
+      },
+      {
+        "title": "Review findings",
+        "sql": "select rule,finding from review_findings where scenario_id=$1 order by rule"
+      }
+    ]
+  },
+  {
+    "name": "decision-record",
+    "title": "Planning review record",
+    "for_each": "select id,code from scenarios order by code",
+    "file": "code",
+    "sections": [
+      {
+        "title": "Review status",
+        "note": "Approval records a scenario review. It does not authorise an employment change.",
+        "sql": "select code,status,submitted_by,approved_by,approval_evidence from scenarios where id=$1"
+      },
+      {
+        "title": "Actions",
+        "sql": "select code,title,owner,due_on,closed_on,evidence from actions where scenario_id=$1 order by code"
+      },
+      {
+        "title": "Activity",
+        "sql": "select actor,action,detail,created_at from events where scenario_id=$1 order by created_at,id"
+      }
     ]
   }
 ]

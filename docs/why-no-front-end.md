@@ -1,24 +1,11 @@
-# Why there is no front end
+# Why this workspace has no front end
 
-Orgvue is a database with a subscription. The tables underneath it are ordinary: a few entities, a few relationships, a handful of workflows you repeat every week. What you pay for is the layer on top that lets people who do not write SQL get at those tables. Screens, filters, dashboards, forms.
+An organisation design review starts with a dated position list and a question: what changes if this group reports elsewhere or its planned capacity changes? The database holds the positions, assumptions, scenario versions and review evidence. A coding agent runs the same commands an operator can inspect.
 
-That layer used to be the whole product, because talking to a database was hard. It is not hard any more. Open this folder in Claude Code, describe what you want, and it writes the query, runs it, and explains the answer. Ask a question the dashboard never had a chart for and you still get an answer.
+The free version answers those questions from imported snapshots. It renders branded, read-only HTML for the review meeting. It does not need a live connector or a graphical editor to do that job.
 
-## What you gain
+Orgvue already provides workforce planning, scenario modelling and rich visual analysis. This build does not claim its ten demo questions are impossible in Orgvue. Ownership means the operator can change the model and join a new source without waiting for this project's maintainer.
 
-- **Better answers.** A dashboard shows what the vendor decided to chart. Here you ask your own question, in your own words, and get it answered against your own data.
-- **No seats.** Everyone who needs to look can look. The bill does not grow with headcount.
-- **Your data in your Postgres.** Plain tables. Back them up, query them from anything, leave any time. There is no export step because there is nothing to leave.
-- **A process that matches you.** When your way of working changes, you add a command. You do not wait for a feature request to clear.
+A graphical org chart gives you spatial editing, direct manipulation and visual navigation. A hosted product can provide collaboration, identity controls, mobile access and managed integrations. This local workspace provides none of those. It is useful for a trusted planning operator preparing reports and comparing position structures. It is not a replacement for every Orgvue feature.
 
-## What you give up
-
-- **A visual board.** Stages are a table you ask about, not cards you drag.
-- **A phone app.** It runs where Claude Code runs.
-- **A vendor help desk.** This is open source. Enterprise DNA supports the installed version for businesses that want someone to call.
-
-## Who this fits
-
-Small teams who already use Claude Code, or who would rather learn to ask than learn another interface. If your team needs a screen to look at all day, keep Orgvue. If you need the answers more than the screens, this is cheaper, faster and yours.
-
-Installed and run for you: https://enterprisedna.co/omni/instead-of/orgvue
+Enterprise DNA can build the agreed web view, access controls and connections into your version. Omni by Enterprise DNA installs and operates it for one setup fee, then a retainer.

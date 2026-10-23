@@ -1,43 +1,59 @@
 # Organisation Design for Claude Code: operating instructions
 
-This file is the brain. Claude Code reads it at the start of every session. It says who this is for, how work gets done, and the one right way to do each recurring job.
+Read README.md and docs/replace-orgvue.md before using real data. This is a trusted-operator workspace for position structures and planning assumptions. The seed is fictional. Put the operator supplied business identity in brand.json.
 
-## Who this is for
+## Work from evidence
 
-- **Business:** [YOUR BUSINESS]
-- **Operator:** [YOUR NAME], [your role]
-- **What matters most:** [the one or two outcomes you care about]
+Read records with the CLI first. Never invent a position, source date, approval, forecast certainty or cost saving. Use the named scenario. Keep currencies separate and distinguish full-time annual rates from FTE-adjusted costs. Compare against the frozen baseline, not a later source version.
 
-Fill this in once. A worker with context knows. A worker without it guesses.
+## One route per recurring job
 
-## How to work
-
-1. **Take a brief, not a script.** The operator describes the outcome. You run the right command and present the answer.
-2. **Read before you write.** Before drafting anything about a record, read its full history first.
-3. **Plain language.** Short sentences. No filler. Numbers in tables.
-4. **Silent success, loud problems.** No play-by-play. Say what broke and what you did about it.
-5. **Stop at the line.** Anything that sends, deletes, or faces a customer waits for a yes in this session.
-
-## Routing table: one right way for each recurring job
-
-| When the operator asks for... | Use this |
+| Request | Recipe |
 |---|---|
-| <!-- TODO(author): one row per slash command --> | `/...` |
+| actions | /actions |
+| activity | /activity |
+| add | /add |
+| add action | /add-action |
+| approve | /approve |
+| attention | /attention |
+| change | /change |
+| changes | /changes |
+| clone | /clone |
+| close action | /close-action |
+| compare | /compare |
+| compliance | /compliance |
+| costs | /costs |
+| create | /create |
+| customise | /customise |
+| departments | /departments |
+| docs | /docs |
+| draft action | /draft-action |
+| draft review | /draft-review |
+| export | /export |
+| help | /help |
+| import | /import |
+| layers | /layers |
+| list | /list |
+| log | /log |
+| new view | /new-view |
+| positions | /positions |
+| reopen | /reopen |
+| review | /review |
+| show | /show |
+| spans | /spans |
+| submit | /submit |
+| vacancies | /vacancies |
+| view | /view |
+| weekly review | /weekly-review |
 
-If an ask fits nothing here, run the CLI directly (`npm run <cli> -- --help`) and then propose a new command for it.
+## Boundaries
 
-## Hard rules
+All writes identify the actor and use the existing CLI. Source dates and review evidence come from the operator. Do not submit or approve unless the operator asked to record that actual review. The different-name rule is an internal control, not authentication. No sends, live HR connections, payroll or employment changes. Never rank people or infer which employees should leave. Drafts stay in drafts/. Reopening requires a reason and leaves history.
 
-- Never send email or messages from here. Draft to `drafts/`, a person sends.
-- Never delete records without an explicit yes in this session. Prefer marking closed or archived.
-- Never invent a record. If a name is ambiguous, list the candidates and ask.
-- The database is the source of truth. If the answer is not in it, say so.
+Use a dedicated database with restricted operator access. The event history is not tamper-proof. Read docs/compliance.md for legal sources and limits. Never seed a working business database.
 
-## Where things live
+## Files and checks
 
-- `scripts/` the CLI. `scripts/lib/db.mjs` picks `DATABASE_URL` (Postgres, Supabase) or the embedded database in `.data/`.
-- `supabase/migrations/` the schema, plain SQL. `npm run migrate` applies it.
-- `.claude/commands/` the slash commands. Add one every time the same ask comes twice.
-- `docs/` the thesis and the guide for moving off Orgvue.
+scripts/org.mjs is the domain CLI. scripts/lib/db.mjs selects PGlite or PostgreSQL. Add forward migrations under supabase/migrations. views.json and documents.json use the shared read-only HTML renderer. All coding agents use .claude/commands. Run npm test after changes and demonstrate the requested behaviour. Use --json for machine output.
 
-Built by Enterprise DNA. Installed and run for you as part of Omni: https://enterprisedna.co/omni/instead-of/orgvue
+Built and run for you through Omni by Enterprise DNA: https://enterprisedna.co/omni/book/?offer=replace-software&utm_campaign=orgvue

@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {getDb,REPO_ROOT} from './lib/db.mjs';
+import {migrate} from './migrate.mjs';
+import {seed} from './seed.mjs';
+import {run,commands,reports} from './org.mjs';
+import {parseCsv} from './lib/csv.mjs';
+const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'org-design-test-'));process.env.DATA_DIR=path.join(tmp,'db');process.env.OUTPUT_DIR=tmp;process.env.DATABASE_URL=process.env.TEST_DATABASE_URL||'';
+let db=await getDb();const tested=new Set();let checks=0;
+const eq=(a,b)=>{assert.deepEqual(a,b);checks++;};const ok=x=>{assert.ok(x);checks++;};
+const call=async(c,o={},a=[])=>{tested.add(c);return run(db,c,o,a);};
+const fails=async(c,o,re,a=[])=>{await assert.rejects(()=>call(c,o,a),re);checks++;};
+const today=new Date().toISOString().slice(0,10),actor={actor:'Test author'};
+const create={code:'IMPORT',name:'Imported positions',owner:'Finance',purpose:'Scenario review','source-as-of':today,'review-on':'2099-01-01','retention-review-on':'2099-01-01',...actor};
+try{
+ if(db.mode==='postgres')eq((await db.query("select tablename from pg_tables where schemaname='public'")).length,0);
+ await migrate(db);eq((await migrate(db)).ran.length,0);await seed(db);const before=await db.query('select id,code,fte from positions order by id');await seed(db);eq(await db.query('select id,code,fte from positions order by id'),before);
+ eq((await call('help')).length,commands.length);eq((await call('list')).length,2);
+ for(const c of Object.keys(reports))ok(Array.isArray(await call(c)));
+ const cost=(await call('costs')).find(x=>x.currency==='NZD');eq(Number(cost.annual_cost_amount),532000);eq(Number(cost.fte),4.4);
+ eq((await call('vacancies')).map(x=>x.code),['P04']);eq((await call('layers')).find(x=>x.code==='P03').layer,3);eq((await call('spans'))[0].direct_reports,3);
+ ok((await call('attention')).some(x=>x.rule==='retention_review'));eq((await call('show',{scenario:'kauri shared'}))[0].code,'OPTION-A');await fails('show',{scenario:'Kauri'},/Ambiguous/);await fails('show',{scenario:'missing'},/No scenarios/);
+ const sid=(await call('show'))[0].id;eq((await call('show',{scenario:sid}))[0].code,'CURRENT');
+ const comp=await call('compare',{scenario:'OPTION-A'});eq(comp.map(x=>[x.currency,x.difference_amount]),[['AUD',0],['NZD',-47500]]);eq((await call('changes',{scenario:'OPTION-A'})).length,3);await fails('compare',{},/no frozen baseline/);
+ await fails('create',{...create,actor:''},/actor/);await fails('create',{...create,'source-as-of':'2026-02-30'},/Invalid date/);await fails('create',{...create,'source-as-of':'2099-01-01'},/future/);await call('create',create);const importedId=(await call('show',{scenario:'IMPORT'}))[0].id;eq((await call('show',{scenario:importedId.slice(0,12)}))[0].code,'IMPORT');
+ const imp={scenario:'IMPORT',file:path.join(REPO_ROOT,'fixtures/orgvue-positions.csv'),map:path.join(REPO_ROOT,'fixtures/orgvue-map.json'),...actor};
+ eq((await call('import',{...imp,'dry-run':true},['orgvue']))[0].status,'validated');eq((await call('positions',{scenario:'IMPORT'})).length,0);
+ eq((await call('import',imp,['orgvue']))[0].rows,3);eq((await call('import',imp,['orgvue']))[0].status,'unchanged');
+ await fails('import',{...imp,map:undefined},/Mapped column/,['orgvue']);await fails('import',imp,/Unexpected argument/,['other']);
+ await call('create',{...create,code:'BAD',name:'Bad test'});
+ const csv=fs.readFileSync(imp.file,'utf8'),bad=path.join(tmp,'bad.csv');
+ for(const [replacement,re] of [[csv.replace('R2,R1','R2,R9'),/Missing parent/],[csv.replace('R1,,','R1,R2,'),/cycle/],[csv.replace('0.5,80000','NaN,80000'),/Invalid decimal/],[csv+'R1,,Again,Management,1,150000,NZD,filled\n',/Duplicate/],[csv.replace('NZD,filled','NZD,unknown'),/Occupancy/]]){
+  fs.writeFileSync(bad,replacement);await fails('import',{...imp,scenario:'BAD',file:bad},re,['orgvue']);eq((await call('positions',{scenario:'BAD'})).length,0);
+ }
+ fs.writeFileSync(bad,csv.replace('80000','90000'));await fails('import',{...imp,file:bad},/empty draft/,['orgvue']);
+ await call('clone',{scenario:'IMPORT',code:'OPTION-B',name:'Extended support option',owner:'Delivery',purpose:'Plan a service line','review-on':'2099-01-01','retention-review-on':'2099-01-01',...actor});
+ const edit={scenario:'OPTION-B',ref:'R2',fte:'0.75',reason:'Service capacity assumption',...actor};await call('change',edit);eq((await call('compare',{scenario:'OPTION-B'})).find(x=>x.currency==='NZD').difference_amount,20000);
+ await call('change',{scenario:'IMPORT',ref:'R2',rate:'85000',reason:'Independent source correction',...actor});eq((await call('compare',{scenario:'OPTION-B'})).find(x=>x.currency==='NZD').difference_amount,20000);
+ await fails('change',{...edit,ref:'R1',parent:'R2'},/cycle/);await fails('change',{...edit,fte:'1.001'},/Invalid decimal/);await fails('change',{...edit,ref:'R9'},/missing/);await fails('change',{...edit,code:'NEW'},/stable/);
+ await call('add',{scenario:'OPTION-B',code:'R4',title:'<script>support</script>',department:'Delivery',parent:'R1',fte:'0.25',rate:'70000.01',currency:'NZD',occupancy:'vacant',reason:'Model a quarter position',...actor});
+ eq(Number((await call('costs',{scenario:'OPTION-B'})).find(x=>x.currency==='NZD').annual_cost_amount),227500);
+ await call('add-action',{scenario:'OPTION-B',code:'CHECK-1',title:'Confirm rate evidence',owner:'Budget owner','due-on':'2099-01-01',...actor});await fails('submit',{scenario:'OPTION-B',evidence:'Reviewed',...actor},/open actions/);
+ await fails('close-action',{scenario:'OPTION-B',ref:'REV-01',evidence:'Reviewed',...actor},/another scenario/);
+ await call('close-action',{scenario:'OPTION-B',ref:'CHECK-1',evidence:'Budget note 42',...actor});await fails('close-action',{scenario:'OPTION-B',ref:'CHECK-1',evidence:'Again',...actor},/already closed/);
+ await call('review',{scenario:'OPTION-B',purpose:'Service capacity model','source-as-of':today,'review-on':'2099-01-01','retention-review-on':'2099-01-01',evidence:'Source report reconciled',...actor});
+ await fails('submit',{scenario:'CURRENT',evidence:'Unchecked',...actor},/Review blocked/);
+ await call('submit',{scenario:'OPTION-B',evidence:'Numbers and sources reviewed',...actor});await fails('change',edit,/locked/);await fails('approve',{scenario:'OPTION-B',evidence:'yes',...actor},/differ/);
+ await call('approve',{scenario:'OPTION-B',evidence:'Finance review minutes 14',actor:'Independent reviewer'});await fails('add',{scenario:'OPTION-B',...actor},/locked/);
+ await call('log',{scenario:'OPTION-B',note:'Approved as a planning scenario only',...actor});ok((await call('activity',{scenario:'OPTION-B'})).length>=7);
+ await call('reopen',{scenario:'OPTION-B',reason:'Model a revised service assumption',...actor});eq((await call('show',{scenario:'OPTION-B'}))[0].approved_by,null);
+ ok((await call('weekly-review',{scenario:'OPTION-B'})).compare.length===2);
+ for(const c of ['draft-review','draft-action']){const result=await call(c,{scenario:'OPTION-B',ref:'CHECK-1'});ok(fs.readFileSync(result[0].file,'utf8').includes('Draft for human review'));}
+ const json=path.join(tmp,'snapshot.json');await call('export',{scenario:'OPTION-B',file:json});const snapshot=JSON.parse(fs.readFileSync(json));eq(snapshot.positions.length,4);ok(snapshot.scenario.baseline_snapshot.length===3);await fails('export',{scenario:'OPTION-B',file:json},/EEXIST/);
+ const exported=path.join(tmp,'snapshot.csv');await call('export',{scenario:'OPTION-B',file:exported});eq(parseCsv(fs.readFileSync(exported,'utf8')).length,4);
+ await call('create',{...create,code:'ROUNDTRIP',name:'Roundtrip'});await call('import',{scenario:'ROUNDTRIP',file:exported,...actor},['orgvue']);eq((await call('positions',{scenario:'ROUNDTRIP'})).map(x=>[x.code,x.fte]),(await call('positions',{scenario:'OPTION-B'})).map(x=>[x.code,x.fte]));
+ assert.throws(()=>parseCsv('a,a\n1,2'),/unique/);checks++;assert.throws(()=>parseCsv('a,b\n1,"unclosed'),/unclosed/);checks++;eq(parseCsv('\ufeffa,b\r\n1,"two\nlines"\r\n')[0].b,'two\nlines');
+ eq([...tested].sort(),[...commands].sort());const mode=db.mode;await db.close();db=null;
+ const child=(script,args=[],status=0)=>{const p=spawnSync(process.execPath,[path.join(REPO_ROOT,'scripts',script),...args],{cwd:REPO_ROOT,env:process.env,encoding:'utf8'});if(p.status!==status)console.error(p.stdout,p.stderr);eq(p.status,status);return p;};
+ eq(JSON.parse(child('org.mjs',['list','--json']).stdout).length,6);child('org.mjs',['show','--scenario=Kauri'],1);child('org.mjs',['positions','--unknown'],1);child('org.mjs',['not-real'],1);
+ child('view.mjs');child('docs.mjs');ok(fs.existsSync(path.join(tmp,'views/week.html')));
+ const html=fs.readFileSync(path.join(tmp,'docs-out/scenario-pack',fs.readdirSync(path.join(tmp,'docs-out/scenario-pack')).find(f=>f.startsWith('option-b-'))),'utf8');ok(html.includes('&lt;script&gt;support&lt;/script&gt;'));ok(!html.includes('<script>support</script>'));
+ console.log(`PASS: ${commands.length} CLI commands, ${checks} checks, ${mode}; migrations, idempotent seed, frozen baselines, currencies, hierarchies, import rollback, review locks, drafts and HTML.`);
+}finally{if(db)await db.close();fs.rmSync(tmp,{recursive:true,force:true});}
