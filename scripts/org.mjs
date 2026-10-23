@@ -34,7 +34,9 @@ async function resolve(db,kind,ref){const rows=await db.query(`select * from ${k
 async function event(db,s,actor,action,detail){await db.query('insert into events(scenario_id,actor,action,detail) values($1,$2,$3,$4)',[s?.id??null,actor,action,JSON.stringify(detail)]);}
 async function rows(db,s){return db.query('select * from positions where scenario_id=$1 order by code',[s.id]);}
 function comparable(p){return Object.fromEntries(fields.map(k=>[k,['fte','annual_rate'].includes(k)?Number(p[k]):p[k]??null]));}
-function totals(list){const m={};for(const p of list){const x=m[p.currency]??={positions:0,fte:0,cost:0};x.positions++;x.fte+=Number(p.fte);x.cost+=Math.round(Number(p.annual_rate)*Number(p.fte)*100)/100;}return m;}
+function scaled(value,places){const [whole,fraction='']=String(value).split('.');return BigInt(whole)*10n**BigInt(places)+BigInt(fraction.padEnd(places,'0'));}
+function moneyText(cents){const sign=cents<0n?'-':'';const n=cents<0n?-cents:cents;return sign+(n/100n)+'.'+String(n%100n).padStart(2,'0');}
+function totals(list){const m={};for(const p of list){const x=m[p.currency]??={positions:0,fte:0n,cost:0n};const fte=scaled(p.fte,3);x.positions++;x.fte+=fte;x.cost+=(scaled(p.annual_rate,2)*fte+500n)/1000n;}return m;}
 function outputFile(file,text){fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});fs.writeFileSync(file,text,{flag:'wx',mode:0o600});return [{file}];}
 export async function run(db,cmd,o={},args=[]){
  if(!commands.includes(cmd))throw Error(`Unknown command ${cmd}`);
@@ -54,7 +56,7 @@ export async function run(db,cmd,o={},args=[]){
   if(!s.baseline_snapshot)throw Error('Scenario has no frozen baseline; clone a scenario first');
   const current=await rows(db,s),base=s.baseline_snapshot;
   if(cmd==='changes'){const old=new Map(base.map(p=>[p.code,p])),now=new Map(current.map(p=>[p.code,p]));return [...new Set([...old.keys(),...now.keys()])].sort().flatMap(code=>{const a=old.get(code),b=now.get(code);if(a&&b&&JSON.stringify(comparable(a))===JSON.stringify(comparable(b)))return [];return [{code,change:!a?'added':!b?'removed':'changed',before:a?comparable(a):null,after:b?comparable(b):null}];});}
-  const a=totals(base),b=totals(current);return [...new Set([...Object.keys(a),...Object.keys(b)])].sort().map(currency=>({currency,baseline_fte:Number((a[currency]?.fte||0).toFixed(3)),scenario_fte:Number((b[currency]?.fte||0).toFixed(3)),baseline_annual_cost_amount:Number((a[currency]?.cost||0).toFixed(2)),scenario_annual_cost_amount:Number((b[currency]?.cost||0).toFixed(2)),difference_amount:Number(((b[currency]?.cost||0)-(a[currency]?.cost||0)).toFixed(2))}));
+  const a=totals(base),b=totals(current);return [...new Set([...Object.keys(a),...Object.keys(b)])].sort().map(currency=>({currency,baseline_fte:Number(a[currency]?.fte||0n)/1000,scenario_fte:Number(b[currency]?.fte||0n)/1000,baseline_annual_cost_amount:moneyText(a[currency]?.cost||0n),scenario_annual_cost_amount:moneyText(b[currency]?.cost||0n),difference_amount:moneyText((b[currency]?.cost||0n)-(a[currency]?.cost||0n))}));
  }
  if(cmd==='weekly-review'){const result={scenario:[{code:s.code,name:s.name,status:s.status,source_as_of:s.source_as_of}]};for(const c of ['costs','spans','compliance','actions'])result[c]=await run(db,c,o);if(s.baseline_snapshot)result.compare=await run(db,'compare',o);return result;}
  if(cmd==='export'){

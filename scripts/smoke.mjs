@@ -24,7 +24,7 @@ try{
  eq((await call('vacancies')).map(x=>x.code),['P04']);eq((await call('layers')).find(x=>x.code==='P03').layer,3);eq((await call('spans'))[0].direct_reports,3);
  ok((await call('attention')).some(x=>x.rule==='retention_review'));eq((await call('show',{scenario:'kauri shared'}))[0].code,'OPTION-A');await fails('show',{scenario:'Kauri'},/Ambiguous/);await fails('show',{scenario:'missing'},/No scenarios/);
  const sid=(await call('show'))[0].id;eq((await call('show',{scenario:sid}))[0].code,'CURRENT');
- const comp=await call('compare',{scenario:'OPTION-A'});eq(comp.map(x=>[x.currency,x.difference_amount]),[['AUD',0],['NZD',-47500]]);eq((await call('changes',{scenario:'OPTION-A'})).length,3);await fails('compare',{},/no frozen baseline/);
+ const comp=await call('compare',{scenario:'OPTION-A'});eq(comp.map(x=>[x.currency,Number(x.difference_amount)]),[['AUD',0],['NZD',-47500]]);eq((await call('changes',{scenario:'OPTION-A'})).length,3);await fails('compare',{},/no frozen baseline/);
  await fails('create',{...create,actor:''},/actor/);await fails('create',{...create,'source-as-of':'2026-02-30'},/Invalid date/);await fails('create',{...create,'source-as-of':'2099-01-01'},/future/);await call('create',create);const importedId=(await call('show',{scenario:'IMPORT'}))[0].id;eq((await call('show',{scenario:importedId.slice(0,12)}))[0].code,'IMPORT');
  const imp={scenario:'IMPORT',file:path.join(REPO_ROOT,'fixtures/orgvue-positions.csv'),map:path.join(REPO_ROOT,'fixtures/orgvue-map.json'),...actor};
  eq((await call('import',{...imp,'dry-run':true},['orgvue']))[0].status,'validated');eq((await call('positions',{scenario:'IMPORT'})).length,0);
@@ -37,8 +37,8 @@ try{
  }
  fs.writeFileSync(bad,csv.replace('80000','90000'));await fails('import',{...imp,file:bad},/empty draft/,['orgvue']);
  await call('clone',{scenario:'IMPORT',code:'OPTION-B',name:'Extended support option',owner:'Delivery',purpose:'Plan a service line','review-on':'2099-01-01','retention-review-on':'2099-01-01',...actor});
- const edit={scenario:'OPTION-B',ref:'R2',fte:'0.75',reason:'Service capacity assumption',...actor};await call('change',edit);eq((await call('compare',{scenario:'OPTION-B'})).find(x=>x.currency==='NZD').difference_amount,20000);
- await call('change',{scenario:'IMPORT',ref:'R2',rate:'85000',reason:'Independent source correction',...actor});eq((await call('compare',{scenario:'OPTION-B'})).find(x=>x.currency==='NZD').difference_amount,20000);
+ const edit={scenario:'OPTION-B',ref:'R2',fte:'0.75',reason:'Service capacity assumption',...actor};await call('change',edit);eq((await call('compare',{scenario:'OPTION-B'})).find(x=>x.currency==='NZD').difference_amount,'20000.00');
+ await call('change',{scenario:'IMPORT',ref:'R2',rate:'85000',reason:'Independent source correction',...actor});eq((await call('compare',{scenario:'OPTION-B'})).find(x=>x.currency==='NZD').difference_amount,'20000.00');
  await fails('change',{...edit,ref:'R1',parent:'R2'},/cycle/);await fails('change',{...edit,fte:'1.001'},/Invalid decimal/);await fails('change',{...edit,ref:'R9'},/missing/);await fails('change',{...edit,code:'NEW'},/stable/);
  await call('add',{scenario:'OPTION-B',code:'R4',title:'<script>support</script>',department:'Delivery',parent:'R1',fte:'0.25',rate:'70000.01',currency:'NZD',occupancy:'vacant',reason:'Model a quarter position',...actor});
  eq(Number((await call('costs',{scenario:'OPTION-B'})).find(x=>x.currency==='NZD').annual_cost_amount),227500);
@@ -57,9 +57,13 @@ try{
  const exported=path.join(tmp,'snapshot.csv');await call('export',{scenario:'OPTION-B',file:exported});eq(parseCsv(fs.readFileSync(exported,'utf8')).length,4);
  await call('create',{...create,code:'ROUNDTRIP',name:'Roundtrip'});await call('import',{scenario:'ROUNDTRIP',file:exported,...actor},['orgvue']);eq((await call('positions',{scenario:'ROUNDTRIP'})).map(x=>[x.code,x.fte]),(await call('positions',{scenario:'OPTION-B'})).map(x=>[x.code,x.fte]));
  assert.throws(()=>parseCsv('a,a\n1,2'),/unique/);checks++;assert.throws(()=>parseCsv('a,b\n1,"unclosed'),/unclosed/);checks++;eq(parseCsv('\ufeffa,b\r\n1,"two\nlines"\r\n')[0].b,'two\nlines');
+ await call('add',{scenario:'BAD',code:'T1',title:'Rounding fixture',department:'Test',fte:'0.5',rate:'2.01',currency:'NZD',occupancy:'filled',reason:'Half-cent regression',...actor});
+ await call('clone',{scenario:'BAD',code:'TIE',name:'Half cent option',owner:'Test',purpose:'Verify rounding','review-on':'2099-01-01','retention-review-on':'2099-01-01',...actor});
+ const tie=(await call('compare',{scenario:'TIE'}))[0];eq(tie.baseline_annual_cost_amount,'1.01');eq(tie.scenario_annual_cost_amount,'1.01');eq(tie.difference_amount,'0.00');
+ eq(Number((await call('costs',{scenario:'TIE'}))[0].annual_cost_amount),1.01);
  eq([...tested].sort(),[...commands].sort());const mode=db.mode;await db.close();db=null;
  const child=(script,args=[],status=0)=>{const p=spawnSync(process.execPath,[path.join(REPO_ROOT,'scripts',script),...args],{cwd:REPO_ROOT,env:process.env,encoding:'utf8'});if(p.status!==status)console.error(p.stdout,p.stderr);eq(p.status,status);return p;};
- eq(JSON.parse(child('org.mjs',['list','--json']).stdout).length,6);child('org.mjs',['show','--scenario=Kauri'],1);child('org.mjs',['positions','--unknown'],1);child('org.mjs',['not-real'],1);
+ eq(JSON.parse(child('org.mjs',['list','--json']).stdout).length,7);child('org.mjs',['show','--scenario=Kauri'],1);child('org.mjs',['positions','--unknown'],1);child('org.mjs',['not-real'],1);
  child('view.mjs');child('docs.mjs');ok(fs.existsSync(path.join(tmp,'views/week.html')));
  const html=fs.readFileSync(path.join(tmp,'docs-out/scenario-pack',fs.readdirSync(path.join(tmp,'docs-out/scenario-pack')).find(f=>f.startsWith('option-b-'))),'utf8');ok(html.includes('&lt;script&gt;support&lt;/script&gt;'));ok(!html.includes('<script>support</script>'));
  console.log(`PASS: ${commands.length} CLI commands, ${checks} checks, ${mode}; migrations, idempotent seed, frozen baselines, currencies, hierarchies, import rollback, review locks, drafts and HTML.`);
